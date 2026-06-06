@@ -68,8 +68,11 @@ class RadarPipelineIntegrationTest {
         List<DetectionResult> detections = new SNRBlock(rdm, 2, 8).process(peaks);
         assertFalse(detections.isEmpty());
 
+        double dopplerFreqHz = targetDoppler * prf / numPulses;
+
         DetectionResult best = detections.get(0);
-        assertEquals(targetDoppler, best.dopplerIndex());
+        assertEquals(rdm.dopplerToBin(dopplerFreqHz), best.dopplerIndex());
+        assertEquals(rdm.timeToBin(0.0) + replicaLen - 1, best.rangeIndex());
         assertTrue(best.snrDb() > 0, "SNR should be positive, got " + best.snrDb());
     }
 }

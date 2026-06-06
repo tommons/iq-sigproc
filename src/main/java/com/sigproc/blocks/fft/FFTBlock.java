@@ -30,4 +30,8 @@ public class FFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
             out[i] = new Complex(buf[2 * i], buf[2 * i + 1]);
         return out;
     }
+
+    public static int frequencyToBin(double freqHz, int fftSize, double sampleRateHz) {
+        return (int) Math.round(freqHz * fftSize / sampleRateHz);
+    }
 }

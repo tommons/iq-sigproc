@@ -28,24 +28,25 @@ class FFTBlockTest {
     @Test
     void toneAtKnownBin() {
         int n = 256;
-        int targetBin = 10;
-        double sampleRate = 1.0;
+        double sampleRate = 256.0;
+        double toneFreq   = 10.0;
+        int expectedBin   = FFTBlock.frequencyToBin(toneFreq, n, sampleRate);
+
         Complex[] samples = new Complex[n];
         for (int i = 0; i < n; i++) {
-            double phase = 2 * Math.PI * targetBin * i / n;
+            double phase = 2 * Math.PI * toneFreq * i / sampleRate;
             samples[i] = new Complex(Math.cos(phase), Math.sin(phase));
         }
 
         ComplexBuffer spectrum = new FFTBlock().process(new ComplexBuffer(samples, sampleRate));
 
-        // find bin with max power
         int maxBin = 0;
         double maxPow = 0;
         for (int k = 0; k < n; k++) {
             double p = spectrum.samples()[k].magnitudeSq();
             if (p > maxPow) { maxPow = p; maxBin = k; }
         }
-        assertEquals(targetBin, maxBin);
+        assertEquals(expectedBin, maxBin);
     }
 
     @Test

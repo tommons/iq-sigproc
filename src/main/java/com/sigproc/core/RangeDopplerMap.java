@@ -13,4 +13,12 @@ public record RangeDopplerMap(Complex[][] data, double sampleRate, double prf) {
     public double magnitudeSq(int r, int d) {
         return data[r][d].magnitudeSq();
     }
+
+    public int timeToBin(double timeDelaySeconds) {
+        return (int) Math.round(timeDelaySeconds * sampleRate);
+    }
+
+    public int dopplerToBin(double dopplerHz) {
+        return (int) Math.round(dopplerHz * numDopplerBins() / prf);
+    }
 }
