@@ -12,28 +12,38 @@ public class PeakPickerBlock implements SignalBlock<RangeDopplerMap, List<Peak>>
 
     private final int maxPeaks;
     private final double thresholdPower;
+    private final int maxDopplerBins;
 
     public PeakPickerBlock(int maxPeaks) {
-        this(maxPeaks, Double.NEGATIVE_INFINITY);
+        this(maxPeaks, Double.NEGATIVE_INFINITY, Integer.MAX_VALUE);
     }
 
-    // thresholdDb is a power threshold in dB; cells below it are ignored
     public PeakPickerBlock(int maxPeaks, double thresholdDb) {
+        this(maxPeaks, thresholdDb, Integer.MAX_VALUE);
+    }
+
+    public PeakPickerBlock(int maxPeaks, int maxDopplerBins) {
+        this(maxPeaks, Double.NEGATIVE_INFINITY, maxDopplerBins);
+    }
+
+    public PeakPickerBlock(int maxPeaks, double thresholdDb, int maxDopplerBins) {
         this.maxPeaks       = maxPeaks;
         this.thresholdPower = Math.pow(10.0, thresholdDb / 10.0);
+        this.maxDopplerBins = maxDopplerBins;
     }
 
     @Override
     public List<Peak> process(RangeDopplerMap map) {
-        int R = map.numRangeBins();
-        int D = map.numDopplerBins();
+        int R    = map.numRangeBins();
+        int D    = map.numDopplerBins();
+        int Deff = Math.min(D, maxDopplerBins);
 
         List<Peak> peaks = new ArrayList<>();
         for (int r = 0; r < R; r++) {
-            for (int d = 0; d < D; d++) {
+            for (int d = 0; d < Deff; d++) {
                 double power = map.magnitudeSq(r, d);
                 if (power < thresholdPower) continue;
-                if (isLocalMax(map, r, d)) {
+                if (isLocalMax(map, r, d, Deff)) {
                     peaks.add(new Peak(r, d, power));
                 }
             }
@@ -43,15 +53,22 @@ public class PeakPickerBlock implements SignalBlock<RangeDopplerMap, List<Peak>>
         return peaks.size() <= maxPeaks ? peaks : peaks.subList(0, maxPeaks);
     }
 
-    private boolean isLocalMax(RangeDopplerMap map, int r, int d) {
+    private boolean isLocalMax(RangeDopplerMap map, int r, int d, int Deff) {
         int R = map.numRangeBins();
         int D = map.numDopplerBins();
         double center = map.magnitudeSq(r, d);
         for (int dr = -1; dr <= 1; dr++) {
             for (int dd = -1; dd <= 1; dd++) {
                 if (dr == 0 && dd == 0) continue;
-                int nr = r + dr, nd = (d + dd + D) % D;
+                int nr = r + dr;
                 if (nr < 0 || nr >= R) continue;
+                int nd;
+                if (Deff >= D) {
+                    nd = (d + dd + D) % D;
+                } else {
+                    nd = d + dd;
+                    if (nd < 0 || nd >= Deff) continue;
+                }
                 if (map.magnitudeSq(nr, nd) > center) return false;
             }
         }
