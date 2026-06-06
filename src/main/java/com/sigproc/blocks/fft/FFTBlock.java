@@ -2,8 +2,11 @@ package com.sigproc.blocks.fft;
 
 import com.sigproc.core.Complex;
 import com.sigproc.core.ComplexBuffer;
+import com.sigproc.core.RangeDopplerMap;
 import com.sigproc.core.SignalBlock;
 import org.jtransforms.fft.DoubleFFT_1D;
+
+import java.util.Arrays;
 
 public class FFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
 
@@ -33,5 +36,11 @@ public class FFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
 
     public static int frequencyToBin(double freqHz, int fftSize, double sampleRateHz) {
         return (int) Math.round(freqHz * fftSize / sampleRateHz);
+    }
+
+    public static RangeDopplerMap toRangeDopplerMap(ComplexBuffer spectrum) {
+        Complex[][] data = new Complex[1][];
+        data[0] = Arrays.copyOf(spectrum.samples(), spectrum.size());
+        return new RangeDopplerMap(data, spectrum.sampleRate(), spectrum.sampleRate());
     }
 }

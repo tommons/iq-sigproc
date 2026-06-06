@@ -1,8 +1,14 @@
 package com.sigproc.blocks.fft;
 
+import com.sigproc.blocks.radar.PeakPickerBlock;
+import com.sigproc.blocks.radar.SNRBlock;
 import com.sigproc.core.Complex;
 import com.sigproc.core.ComplexBuffer;
+import com.sigproc.core.DetectionResult;
+import com.sigproc.core.RangeDopplerMap;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -47,6 +53,30 @@ class FFTBlockTest {
             if (p > maxPow) { maxPow = p; maxBin = k; }
         }
         assertEquals(expectedBin, maxBin);
+    }
+
+    @Test
+    void detectToneInSpectrum() {
+        int n = 256;
+        double sampleRate = 256.0;
+        double toneFreq   = 10.0;
+        int expectedBin   = FFTBlock.frequencyToBin(toneFreq, n, sampleRate);
+
+        Complex[] samples = new Complex[n];
+        for (int i = 0; i < n; i++) {
+            double phase = 2 * Math.PI * toneFreq * i / sampleRate;
+            samples[i] = new Complex(Math.cos(phase), Math.sin(phase));
+        }
+
+        ComplexBuffer spectrum = new FFTBlock().process(new ComplexBuffer(samples, sampleRate));
+        RangeDopplerMap rdm    = FFTBlock.toRangeDopplerMap(spectrum);
+
+        List<DetectionResult> detections = new SNRBlock(rdm, 2, 8)
+                .process(new PeakPickerBlock(3).process(rdm));
+
+        assertFalse(detections.isEmpty());
+        assertEquals(expectedBin, detections.get(0).dopplerIndex());
+        assertTrue(detections.get(0).snrDb() > 0);
     }
 
     @Test
