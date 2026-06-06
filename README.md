@@ -1,230 +1,211 @@
-# Plan: Composable IQ Signal Processing Toolbox (Java/Radar)
+# iq-sigproc
 
-## Context
-Build a Maven + pure-Java library for radar/SDR signal processing of IQ data.
-The user needs a composable pipeline model so processing blocks can be chained
-fluently. V1 scope: FFT, pulse compression (with replica generation), Doppler FFT,
-peak picking, and SNR computation.
+A composable Java library for radar / SDR signal processing of IQ data. Processing steps are expressed as typed `SignalBlock` instances that can be chained with a fluent `SignalPipeline` builder.
+
+## Requirements
+
+- Java 17+
+- Maven 3.x
+- JTransforms 3.1 (fetched automatically by Maven)
+
+## Build & test
+
+```bash
+mvn test
+```
 
 ---
 
 ## Project layout
 
 ```
-iq-sigproc/
-├── pom.xml
-└── src/
-    ├── main/java/com/sigproc/
-    │   ├── core/
-    │   │   ├── Complex.java            value type: re + im, arithmetic ops
-    │   │   ├── ComplexBuffer.java      1-D complex array + sampleRate metadata
-    │   │   ├── RangeDopplerMap.java    2-D complex array [rangeBins × dopplerBins]
-    │   │   ├── Peak.java               range/Doppler bin indices + magnitude
-    │   │   ├── DetectionResult.java    Peak + snrDb
-    │   │   ├── NoiseLevel.java         power field (mean |x|²) + dB() accessor (10·log10(power))
-    │   │   ├── SignalBlock.java        @FunctionalInterface I → O
-    │   │   ├── SignalPipeline.java     fluent chain builder
-    │   │   └── Blocks.java            static utility: mapEach(block)
-    │   └── blocks/
-    │       ├── fft/
-    │       │   ├── FFTBlock.java       ComplexBuffer → ComplexBuffer (forward, wraps JTransforms)
-    │       │   └── IFFTBlock.java      ComplexBuffer → ComplexBuffer (inverse, wraps JTransforms)
-    │       ├── window/
-    │       │   └── Window.java         enum: RECT, HAMMING, HANN, BLACKMAN + apply()
-    │       └── radar/
-    │           ├── ReplicaGenerator.java     generates LFM chirp as ComplexBuffer
-    │           ├── PulseCompressor.java      matched filter in freq domain
-    │           ├── DopplerFFTBlock.java      List<ComplexBuffer> → RangeDopplerMap
-    │           ├── GlobalNoiseLevelBlock.java RangeDopplerMap → NoiseLevel
-    │           ├── PeakPickerBlock.java      RangeDopplerMap → List<Peak>
-    │           └── SNRBlock.java             List<Peak> → List<DetectionResult>
-    └── test/java/com/sigproc/
-        ├── core/SignalPipelineTest.java
-        └── blocks/
-            ├── fft/FFTBlockTest.java
-            └── radar/
-                ├── PulseCompressorTest.java
-                ├── DopplerFFTBlockTest.java
-                └── RadarPipelineIntegrationTest.java
+src/main/java/com/sigproc/
+├── core/
+│   ├── Complex.java
+│   ├── ComplexBuffer.java
+│   ├── RangeDopplerMap.java
+│   ├── Peak.java
+│   ├── DetectionResult.java
+│   ├── NoiseLevel.java
+│   ├── SignalBlock.java
+│   ├── SignalPipeline.java
+│   └── Blocks.java
+└── blocks/
+    ├── fft/
+    │   ├── FFTBlock.java
+    │   └── IFFTBlock.java
+    ├── window/
+    │   └── Window.java
+    └── radar/
+        ├── ReplicaGenerator.java
+        ├── PulseCompressor.java
+        ├── DopplerFFTBlock.java
+        ├── GlobalNoiseLevelBlock.java
+        ├── PeakPickerBlock.java
+        └── SNRBlock.java
 ```
 
 ---
 
 ## Core types
 
-### `Complex` (record)
+### `Complex`
+Immutable value type (`re`, `im`). Arithmetic: `add`, `subtract`, `multiply`, `conjugate`. Magnitude: `magnitude()`, `magnitudeSq()`. Polar construction: `Complex.fromPolar(r, theta)`.
+
+### `ComplexBuffer`
+1-D array of `Complex` samples with a `sampleRate` (Hz). `zeroPadTo(int n)` pads with `Complex.ZERO` for use before convolution.
+
+### `RangeDopplerMap`
+2-D complex array `data[rangeBin][dopplerBin]` with `sampleRate` and `prf` metadata.
+
+**Bin conversion helpers:**
 ```java
-public record Complex(double re, double im) {
-    public Complex add(Complex o)       { return new Complex(re+o.re, im+o.im); }
-    public Complex subtract(Complex o)  { return new Complex(re-o.re, im-o.im); }
-    public Complex multiply(Complex o)  { return new Complex(re*o.re - im*o.im, re*o.im + im*o.re); }
-    public Complex conjugate()          { return new Complex(re, -im); }
-    public double  magnitude()          { return Math.sqrt(re*re + im*im); }
-    public double  magnitudeSq()        { return re*re + im*im; }
-    public static Complex fromPolar(double r, double theta) { ... }
-}
+int r = rdm.timeToBin(timeDelaySeconds);   // round(τ · sampleRate)
+int d = rdm.dopplerToBin(dopplerHz);       // round(fd · numDopplerBins / prf)
 ```
 
-### `ComplexBuffer` (record)
+### `Peak` / `DetectionResult`
+`Peak` carries `rangeIndex`, `dopplerIndex`, and `power` (magnitude²). `DetectionResult` wraps a `Peak` with an `snrDb` value.
+
+### `NoiseLevel`
+Holds a mean `power` (mean |x|²) and a `dB()` accessor (`10·log10(power)`).
+
+### `SignalBlock<I,O>`
+Functional interface: `O process(I input)`. Any lambda or method reference qualifies.
+
+### `SignalPipeline<T>`
+Fluent chain builder:
 ```java
-public record ComplexBuffer(Complex[] samples, double sampleRate) {
-    public int size() { return samples.length; }
-    public ComplexBuffer zeroPadTo(int n) { ... }   // convenience for FFT
-}
+Result r = SignalPipeline.of(input)
+    .then(blockA)
+    .then(blockB)
+    .get();
 ```
 
-### `RangeDopplerMap` (record)
+### `Blocks`
+Lifts a per-element block to operate over a `List`:
 ```java
-// data[rangeIndex][dopplerIndex]
-public record RangeDopplerMap(Complex[][] data, double sampleRate, double prf) {
-    public int numRangeBins()   { return data.length; }
-    public int numDopplerBins() { return data[0].length; }
-    public double magnitude(int r, int d) { return data[r][d].magnitude(); }
-}
+SignalBlock<List<ComplexBuffer>, List<ComplexBuffer>> allCompressed =
+    Blocks.mapEach(new PulseCompressor(replica));
 ```
 
-### `SignalBlock` (functional interface)
-```java
-@FunctionalInterface
-public interface SignalBlock<I, O> {
-    O process(I input);
-}
-```
+---
 
-### `SignalPipeline<T>` (fluent builder)
-```java
-public final class SignalPipeline<T> {
-    public static <T> SignalPipeline<T> of(T data) { ... }
-    public <R> SignalPipeline<R> then(SignalBlock<T, R> block) { ... }
-    public T get() { ... }
-}
-```
+## Windows
 
-### `Blocks` (utility)
-```java
-public final class Blocks {
-    // Lifts a per-element block to operate over List
-    public static <I, O> SignalBlock<List<I>, List<O>> mapEach(SignalBlock<I, O> block) {
-        return inputs -> inputs.stream().map(block::process).collect(Collectors.toList());
-    }
-}
-```
+`Window` enum — each constant implements `double[] apply(int n)`:
+
+| Constant | Description |
+|----------|-------------|
+| `RECT` | Rectangular (uniform weights, no sidelobe reduction) |
+| `HAMMING` | Hamming — moderate sidelobe suppression (~−43 dB) |
+| `HANN` | Hann — smooth roll-off, good general purpose |
+| `BLACKMAN` | Blackman — high sidelobe suppression (~−74 dB) |
+| `TAYLOR` | Taylor (nbar=4, −30 dB sidelobes) — standard radar choice |
+
+Used by `DopplerFFTBlock` for slow-time windowing. Apply manually to a `ComplexBuffer` before passing to `FFTBlock` for fast-time windowing.
 
 ---
 
 ## Processing blocks
 
 ### `FFTBlock` / `IFFTBlock`
-Thin wrappers around **JTransforms** `DoubleFFT_1D`. Supports arbitrary input
-lengths — no padding required.
+Thin wrappers around JTransforms `DoubleFFT_1D`. Handles arbitrary lengths (no power-of-2 requirement).
 
-Internal flow: `Complex[]` → interleaved `double[]` (re₀, im₀, re₁, im₁, …) →
-`DoubleFFT_1D.complexForward` / `complexInverse` → back to `Complex[]`.
+**Gain convention:** forward FFT is **unnormalized** (a DC signal of amplitude 1 with N samples produces bin 0 with magnitude N). The inverse FFT divides by N, so `ifft(fft(x)) == x`.
 
+**Static helpers:**
 ```java
-// dependency in pom.xml:
-// com.github.wendykierp:JTransforms:3.1
-DoubleFFT_1D fft = new DoubleFFT_1D(n);
-fft.complexForward(interleaved);   // in-place, arbitrary n
-fft.complexInverse(interleaved, true); // true = scale by 1/N
-```
+// Frequency (Hz) → expected FFT bin index
+int bin = FFTBlock.frequencyToBin(freqHz, fftSize, sampleRateHz);
 
-`ComplexBuffer.zeroPadTo()` is retained as an optional utility (e.g. for
-linear-convolution length in pulse compression) but is no longer required by
-the FFT blocks themselves.
+// Wrap a 1-D spectrum as a single-row RangeDopplerMap for downstream detection
+// Sets prf = sampleRate so dopplerToBin(f) == frequencyToBin(f, N, sampleRate)
+RangeDopplerMap rdm = FFTBlock.toRangeDopplerMap(spectrum);
+```
 
 ### `ReplicaGenerator`
-Generates a baseband LFM (linear frequency modulated) chirp.
+Generates a baseband LFM chirp:
+```
+s(t) = exp(jπ · (B/τ) · t²)   for 0 ≤ t < pulseWidth
+```
 ```java
-public ReplicaGenerator(double bandwidth, double pulseWidth, double sampleRate)
-public ComplexBuffer generate()
-// s(t) = exp(j * π * (bandwidth/pulseWidth) * t²)  for 0 ≤ t < pulseWidth
+ComplexBuffer replica = new ReplicaGenerator(bandwidth, pulseWidth, sampleRate).generate();
 ```
 
-### `PulseCompressor` — `SignalBlock<ComplexBuffer, ComplexBuffer>`
-Matched filter via frequency-domain multiplication:
-1. Zero-pad input and replica to length `inputLen + replicaLen - 1` (linear convolution length — no power-of-2 requirement)
-2. FFT both (via JTransforms `DoubleFFT_1D`)
-3. Pointwise: `out[k] = input[k] * conj(replica[k])`
-4. IFFT → compressed pulse (trim to valid length)
+### `PulseCompressor`
+Matched filter via frequency-domain multiplication. Uses the **matched-filter convolution** convention — the replica is time-reversed and conjugated before the FFT, so the output peak for a zero-delay target is at index `replicaLen − 1`.
 
-Constructor accepts a pre-computed `ComplexBuffer` replica (or use `ReplicaGenerator`).
-
-### `DopplerFFTBlock` — `SignalBlock<List<ComplexBuffer>, RangeDopplerMap>`
-```java
-public DopplerFFTBlock(Window slowTimeWindow, double prf)
-```
-Steps:
-1. Stack N compressed pulses into `Complex[numRangeBins][N]`
-2. Apply `slowTimeWindow` along slow-time (pulse) axis per range bin
-3. FFT each row along slow-time dimension
-4. Wrap in `RangeDopplerMap`
-
-### `PeakPickerBlock` — `SignalBlock<RangeDopplerMap, List<Peak>>`
-Finds local maxima above an optional dB threshold; returns top-N peaks sorted
-by magnitude. Each `Peak` carries `rangeIndex`, `dopplerIndex`, `magnitude`.
+Output length = `inputLen + replicaLen − 1` (linear convolution, no circular aliasing).
 
 ```java
-public PeakPickerBlock(int maxPeaks)
-public PeakPickerBlock(int maxPeaks, double thresholdDb)
+ComplexBuffer compressed = new PulseCompressor(replica).process(receivedPulse);
 ```
 
-### `GlobalNoiseLevelBlock` — `SignalBlock<RangeDopplerMap, NoiseLevel>`
-Computes mean power across all cells in the map (no sqrt):
-
-```
-power = mean( |data[r][d]|² )   over all r, d
-      = mean( re² + im² )
+### `DopplerFFTBlock`
+Stacks N compressed pulses into a range × pulse matrix, applies a slow-time window per range bin, and FFTs along the pulse (slow-time) axis:
+```java
+RangeDopplerMap rdm = new DopplerFFTBlock(Window.TAYLOR, prf).process(compressedPulses);
 ```
 
-`NoiseLevel` is a record with a single `double power` field and a `dB()` accessor
-(`10 * log10(power)`). No configuration needed — single no-arg constructor.
+### `GlobalNoiseLevelBlock`
+Mean power across all cells: `power = mean(|data[r][d]|²)`.
+```java
+NoiseLevel nl = new GlobalNoiseLevelBlock().process(rdm);
+double noiseFloorDb = nl.dB();
+```
+
+### `PeakPickerBlock`
+Finds local maxima (8-connected neighborhood) above an optional dB threshold and returns the top-N peaks sorted by power descending.
 
 ```java
-public GlobalNoiseLevelBlock()
+new PeakPickerBlock(maxPeaks)
+new PeakPickerBlock(maxPeaks, thresholdDb)
+
+// Restrict search to first maxDopplerBins — use N/2 for real-signal half-spectrum
+new PeakPickerBlock(maxPeaks, maxDopplerBins)
+new PeakPickerBlock(maxPeaks, thresholdDb, maxDopplerBins)
 ```
 
-### `SNRBlock` — `SignalBlock<List<Peak>, List<DetectionResult>>`
-For each peak, estimates noise power from a CFAR-style sliding window on the
-magnitude map (configurable guard cells + training cells), then computes
-`snrDb = 10 * log10(signalPower / noisePower)`.
+When `maxDopplerBins < numDopplerBins`, the Doppler neighbor check is **non-cyclic** at the boundary (prevents wrap-around between the Nyquist bin and DC).
 
+### `SNRBlock`
+CA-CFAR SNR estimation along the Doppler axis. For each peak, averages power in training cells on either side (skipping guard cells) and computes `snrDb = 10·log10(signalPower / noisePower)`.
 ```java
-public SNRBlock(RangeDopplerMap map, int guardCells, int trainingCells)
+List<DetectionResult> detections = new SNRBlock(rdm, guardCells, trainingCells).process(peaks);
 ```
 
 ---
 
-## Example pipeline
-```java
-ReplicaGenerator rg = new ReplicaGenerator(10e6, 10e-6, 100e6);
-ComplexBuffer replica = rg.generate();
+## Example: full radar pipeline
 
-List<DetectionResult> detections = SignalPipeline
-    .of(rawPulses)                                          // List<ComplexBuffer>
-    .then(Blocks.mapEach(new PulseCompressor(replica)))     // List<ComplexBuffer>
-    .then(new DopplerFFTBlock(Window.HAMMING, 1000.0))      // RangeDopplerMap
-    .then(new PeakPickerBlock(5, 10.0))                     // List<Peak>
-    .then(new SNRBlock(rdMap, 2, 8))                        // List<DetectionResult>
+```java
+ReplicaGenerator rg     = new ReplicaGenerator(10e6, 10e-6, 100e6);
+ComplexBuffer    replica = rg.generate();
+
+RangeDopplerMap rdm = SignalPipeline
+    .of(rawPulses)                                            // List<ComplexBuffer>
+    .then(Blocks.mapEach(new PulseCompressor(replica)))       // List<ComplexBuffer>
+    .then(new DopplerFFTBlock(Window.TAYLOR, 1000.0))         // RangeDopplerMap
     .get();
+
+List<DetectionResult> detections = new SNRBlock(rdm, 2, 8)
+    .process(new PeakPickerBlock(5, 10.0).process(rdm));
+
+// Verify a known target
+int expectedRange   = rdm.timeToBin(0.0) + replica.size() - 1;  // zero-delay target
+int expectedDoppler = rdm.dopplerToBin(targetDopplerHz);
 ```
 
----
+## Example: 1-D spectral detection
 
-## Maven `pom.xml` highlights
-- Java 17 (records, sealed types)
-- `maven-compiler-plugin` source/target 17
-- JUnit 5 (`junit-jupiter`) for tests
-- **JTransforms 3.1** (`com.github.wendykierp:JTransforms:3.1`) for FFT — handles arbitrary lengths via mixed-radix / Bluestein
+```java
+ComplexBuffer spectrum = new FFTBlock().process(new ComplexBuffer(samples, sampleRate));
+RangeDopplerMap rdm    = FFTBlock.toRangeDopplerMap(spectrum);
 
----
+// For real-valued input: limit to positive frequencies (first N/2 bins)
+List<DetectionResult> detections = new SNRBlock(rdm, 2, 8)
+    .process(new PeakPickerBlock(3, 10.0, spectrum.size() / 2).process(rdm));
 
-## Verification
-
-1. **Unit — FFT round-trip**: `ifft(fft(x)) ≈ x` to floating-point precision.
-2. **Unit — tone detection**: single complex tone at bin k → FFT magnitude spike at k.
-3. **Unit — pulse compression**: LFM chirp cross-correlated with its own replica → narrow mainlobe, sidelobes below −13 dB.
-4. **Unit — Doppler FFT**: N pulses of a stationary target → energy concentrated in bin 0; moving target shifts to correct Doppler bin.
-5. **Unit — global noise level**: uniform noise map → `NoiseLevel.power` matches `mean(|x|²)` analytically; `dB()` matches `10·log10(power)` within floating-point tolerance.
-6. **Integration — full pipeline**: synthetic scene (point target at known range/Doppler) runs end-to-end; `DetectionResult` reports expected range bin, Doppler bin, and SNR > 0 dB.
-7. `mvn test` passes all tests; only external dependency is JTransforms.
+int expectedBin = FFTBlock.frequencyToBin(toneFreqHz, spectrum.size(), sampleRate);
+```
