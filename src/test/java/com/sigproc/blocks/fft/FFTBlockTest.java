@@ -2,6 +2,7 @@ package com.sigproc.blocks.fft;
 
 import com.sigproc.blocks.radar.PeakPickerBlock;
 import com.sigproc.blocks.radar.SNRBlock;
+import com.sigproc.blocks.window.Window;
 import com.sigproc.core.Complex;
 import com.sigproc.core.ComplexBuffer;
 import com.sigproc.core.DetectionResult;
@@ -101,6 +102,38 @@ class FFTBlockTest {
 
         assertEquals(1, detections.size());
         assertEquals(expectedBin, detections.get(0).dopplerIndex());
+    }
+
+    @Test
+    void windowingPreservesToneBin() {
+        int n = 256;
+        double sampleRate = 256.0;
+        double toneFreq   = 10.0;
+        int expectedBin   = FFTBlock.frequencyToBin(toneFreq, n, sampleRate);
+
+        Complex[] samples = new Complex[n];
+        for (int i = 0; i < n; i++) {
+            double phase = 2 * Math.PI * toneFreq * i / sampleRate;
+            samples[i] = new Complex(Math.cos(phase), Math.sin(phase));
+        }
+        ComplexBuffer buf = new ComplexBuffer(samples, sampleRate);
+
+        ComplexBuffer rectSpectrum    = new FFTBlock().process(buf);
+        ComplexBuffer hammingSpectrum = new FFTBlock(Window.HAMMING).process(buf);
+
+        // peak bin is unchanged by windowing
+        int maxBin = 0; double maxPow = 0;
+        for (int k = 0; k < n; k++) {
+            double p = hammingSpectrum.samples()[k].magnitudeSq();
+            if (p > maxPow) { maxPow = p; maxBin = k; }
+        }
+        assertEquals(expectedBin, maxBin);
+
+        // window was actually applied — output differs from RECT
+        assertNotEquals(
+            rectSpectrum.samples()[expectedBin].re(),
+            hammingSpectrum.samples()[expectedBin].re()
+        );
     }
 
     @Test

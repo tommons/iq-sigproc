@@ -1,5 +1,6 @@
 package com.sigproc.blocks.fft;
 
+import com.sigproc.blocks.window.Window;
 import com.sigproc.core.Complex;
 import com.sigproc.core.ComplexBuffer;
 import com.sigproc.core.RangeDopplerMap;
@@ -10,10 +11,25 @@ import java.util.Arrays;
 
 public class FFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
 
+    private final Window window;
+
+    public FFTBlock() {
+        this(Window.RECT);
+    }
+
+    public FFTBlock(Window window) {
+        this.window = window;
+    }
+
     @Override
     public ComplexBuffer process(ComplexBuffer input) {
         int n = input.size();
         double[] interleaved = toInterleaved(input.samples());
+        double[] win = window.apply(n);
+        for (int i = 0; i < n; i++) {
+            interleaved[2 * i]     *= win[i];
+            interleaved[2 * i + 1] *= win[i];
+        }
         new DoubleFFT_1D(n).complexForward(interleaved);
         return new ComplexBuffer(fromInterleaved(interleaved), input.sampleRate());
     }
