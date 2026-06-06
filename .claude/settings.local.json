@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn test *)",
+      "Bash(java -version)",
+      "Read(//usr/local/bin/**)",
+      "Bash(find /Users/tom -name \"mvn\" 2>/dev/null | head -5; find /opt -name \"mvn\" 2>/dev/null | head -5)",
+      "Read(//Users/tom/**)",
+      "Read(//opt/**)",
+      "Bash(brew install *)"
+    ]
+  }
+}
