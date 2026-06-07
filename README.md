@@ -29,11 +29,13 @@ src/main/java/com/sigproc/
 │   ├── NoiseLevel.java
 │   ├── SignalBlock.java
 │   ├── SignalPipeline.java
-│   └── Blocks.java
+│   ├── Blocks.java
+│   └── SineGenerator.java
 └── blocks/
     ├── fft/
     │   ├── FFTBlock.java
-    │   └── IFFTBlock.java
+    │   ├── IFFTBlock.java
+    │   └── InterpFTBlock.java
     ├── window/
     │   └── Window.java
     └── radar/
@@ -53,7 +55,14 @@ src/main/java/com/sigproc/
 Immutable value type (`re`, `im`). Arithmetic: `add`, `subtract`, `multiply`, `conjugate`. Magnitude: `magnitude()`, `magnitudeSq()`. Polar construction: `Complex.fromPolar(r, theta)`.
 
 ### `ComplexBuffer`
-1-D array of `Complex` samples with a `sampleRate` (Hz). `zeroPadTo(int n)` pads with `Complex.ZERO` for use before convolution.
+1-D array of `Complex` samples with a `sampleRate` (Hz).
+
+```java
+buf.zeroPadTo(int n)           // pad with Complex.ZERO up to length n
+buf.slice(int from, int to)    // sub-array [from, to) — preserves sampleRate
+buf.circshift(int shift)       // circular shift right by shift samples (negative = left)
+buf.magnitudeSquared()         // double[] of |x[i]|² for each sample
+```
 
 ### `RangeDopplerMap`
 2-D complex array `data[rangeBin][dopplerBin]` with `sampleRate` and `prf` metadata.
@@ -103,7 +112,25 @@ SignalBlock<List<ComplexBuffer>, List<ComplexBuffer>> allCompressed =
 | `BLACKMAN` | Blackman — high sidelobe suppression (~−74 dB) |
 | `TAYLOR` | Taylor (nbar=4, −30 dB sidelobes) — standard radar choice |
 
-Used by `DopplerFFTBlock` for slow-time windowing. Apply manually to a `ComplexBuffer` before passing to `FFTBlock` for fast-time windowing.
+Used by `DopplerFFTBlock` for slow-time windowing. Pass to `FFTBlock` for fast-time windowing:
+
+---
+
+## Processing blocks
+
+```java
+ComplexBuffer spectrum = new FFTBlock(Window.TAYLOR).process(buf);
+```
+
+### `SineGenerator`
+Generates a sampled sinusoid as a `ComplexBuffer`.
+
+```java
+SineGenerator gen = new SineGenerator(frequencyHz, numSamples, sampleRate);
+
+ComplexBuffer complex = gen.generate();     // complex exponential: cos(2πfn/fs) + j·sin(2πfn/fs)
+ComplexBuffer real    = gen.generateReal(); // real-only sine:      sin(2πfn/fs), im = 0
+```
 
 ---
 
@@ -123,6 +150,16 @@ int bin = FFTBlock.frequencyToBin(freqHz, fftSize, sampleRateHz);
 // Sets prf = sampleRate so dopplerToBin(f) == frequencyToBin(f, N, sampleRate)
 RangeDopplerMap rdm = FFTBlock.toRangeDopplerMap(spectrum);
 ```
+
+### `InterpFTBlock`
+FFT-based upsampling by an integer factor. Performs a forward FFT, zero-pads the spectrum in the middle, then inverse-FFTs to produce a longer signal with the same frequency content. Exact for band-limited inputs.
+
+```java
+// 4× upsampling: 128 samples @ 1 kHz → 512 samples @ 4 kHz
+ComplexBuffer upsampled = new InterpFTBlock(4).process(buf);
+```
+
+Output length = `inputLength × factor`. Output `sampleRate` = input `sampleRate × factor`. Amplitude is preserved (unit-magnitude tone stays unit-magnitude).
 
 ### `ReplicaGenerator`
 Generates a baseband LFM chirp:
@@ -167,6 +204,13 @@ new PeakPickerBlock(maxPeaks, maxDopplerBins)
 new PeakPickerBlock(maxPeaks, thresholdDb, maxDopplerBins)
 ```
 
+`process()` accepts either a `RangeDopplerMap` or a `ComplexBuffer` directly — the buffer is treated as a single-row map (no range dimension):
+
+```java
+List<Peak> peaks = new PeakPickerBlock(3, 10.0).process(spectrum);   // ComplexBuffer
+List<Peak> peaks = new PeakPickerBlock(3, 10.0).process(rdm);        // RangeDopplerMap
+```
+
 When `maxDopplerBins < numDopplerBins`, the Doppler neighbor check is **non-cyclic** at the boundary (prevents wrap-around between the Nyquist bin and DC).
 
 ### `SNRBlock`
@@ -204,8 +248,9 @@ ComplexBuffer spectrum = new FFTBlock().process(new ComplexBuffer(samples, sampl
 RangeDopplerMap rdm    = FFTBlock.toRangeDopplerMap(spectrum);
 
 // For real-valued input: limit to positive frequencies (first N/2 bins)
+// PeakPickerBlock accepts ComplexBuffer directly — no need to wrap in RangeDopplerMap
 List<DetectionResult> detections = new SNRBlock(rdm, 2, 8)
-    .process(new PeakPickerBlock(3, 10.0, spectrum.size() / 2).process(rdm));
+    .process(new PeakPickerBlock(3, 10.0, spectrum.size() / 2).process(spectrum));
 
 int expectedBin = FFTBlock.frequencyToBin(toneFreqHz, spectrum.size(), sampleRate);
 ```

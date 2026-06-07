@@ -6,6 +6,7 @@ import com.sigproc.blocks.window.Window;
 import com.sigproc.core.Complex;
 import com.sigproc.core.ComplexBuffer;
 import com.sigproc.core.DetectionResult;
+import com.sigproc.core.Peak;
 import com.sigproc.core.RangeDopplerMap;
 import org.junit.jupiter.api.Test;
 
@@ -73,7 +74,7 @@ class FFTBlockTest {
         RangeDopplerMap rdm    = FFTBlock.toRangeDopplerMap(spectrum);
 
         List<DetectionResult> detections = new SNRBlock(rdm, 2, 8)
-                .process(new PeakPickerBlock(3).process(rdm));
+                .process(new PeakPickerBlock(3).process(spectrum));
 
         assertFalse(detections.isEmpty());
         assertEquals(expectedBin, detections.get(0).dopplerIndex());
@@ -98,7 +99,7 @@ class FFTBlockTest {
         RangeDopplerMap rdm    = FFTBlock.toRangeDopplerMap(spectrum);
 
         List<DetectionResult> detections = new SNRBlock(rdm, 2, 8)
-                .process(new PeakPickerBlock(3, 10.0, n / 2).process(rdm));
+                .process(new PeakPickerBlock(3, 10.0, n / 2).process(spectrum));
 
         assertEquals(1, detections.size());
         assertEquals(expectedBin, detections.get(0).dopplerIndex());
@@ -134,6 +135,31 @@ class FFTBlockTest {
             rectSpectrum.samples()[expectedBin].re(),
             hammingSpectrum.samples()[expectedBin].re()
         );
+    }
+
+    @Test
+    void peakPickOnSpectrumSubset() {
+        int n = 256;
+        double sampleRate = 256.0;
+        double toneFreq   = 10.0;
+        int toneBin       = FFTBlock.frequencyToBin(toneFreq, n, sampleRate);
+
+        Complex[] samples = new Complex[n];
+        for (int i = 0; i < n; i++) {
+            double phase = 2 * Math.PI * toneFreq * i / sampleRate;
+            samples[i] = new Complex(Math.cos(phase), Math.sin(phase));
+        }
+
+        ComplexBuffer spectrum = new FFTBlock().process(new ComplexBuffer(samples, sampleRate));
+
+        // Extract bins 5..20 — the tone at bin 10 falls inside this window
+        int subStart = 5, subEnd = 21;
+        ComplexBuffer sub = spectrum.slice(subStart, subEnd);
+
+        List<Peak> peaks = new PeakPickerBlock(1, 10.0).process(sub);
+
+        assertFalse(peaks.isEmpty());
+        assertEquals(toneBin - subStart, peaks.get(0).dopplerIndex());
     }
 
     @Test

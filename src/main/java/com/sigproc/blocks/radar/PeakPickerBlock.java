@@ -1,5 +1,7 @@
 package com.sigproc.blocks.radar;
 
+import com.sigproc.core.Complex;
+import com.sigproc.core.ComplexBuffer;
 import com.sigproc.core.Peak;
 import com.sigproc.core.RangeDopplerMap;
 import com.sigproc.core.SignalBlock;
@@ -30,6 +32,12 @@ public class PeakPickerBlock implements SignalBlock<RangeDopplerMap, List<Peak>>
         this.maxPeaks       = maxPeaks;
         this.thresholdPower = Math.pow(10.0, thresholdDb / 10.0);
         this.maxDopplerBins = maxDopplerBins;
+    }
+
+    public List<Peak> process(ComplexBuffer buffer) {
+        Complex[][] data = new Complex[1][];
+        data[0] = buffer.samples().clone();
+        return process(new RangeDopplerMap(data, buffer.sampleRate(), buffer.sampleRate()));
     }
 
     @Override
