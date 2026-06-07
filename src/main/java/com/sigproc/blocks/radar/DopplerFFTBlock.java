@@ -51,9 +51,10 @@ public class DopplerFFTBlock implements SignalBlock<List<ComplexBuffer>, RangeDo
         for (int r = 0; r < numRangeBins; r++) {
             double[] interleaved = new double[numPulses * 2];
             for (int p = 0; p < numPulses; p++) {
-                Complex s = pulses.get(p).samples()[r];
-                interleaved[2 * p]     = s.re() * win[p];
-                interleaved[2 * p + 1] = s.im() * win[p];
+                Complex s   = pulses.get(p).samples()[r];
+                int     idx = 2 * p;
+                interleaved[idx]   = s.re() * win[p];
+                interleaved[idx+1] = s.im() * win[p];
             }
             new DoubleFFT_1D(numPulses).complexForward(interleaved);
             Complex[] row = FFTBlock.fromInterleaved(interleaved);

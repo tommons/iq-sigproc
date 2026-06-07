@@ -26,9 +26,10 @@ public class SineGenerator {
      * @return A ComplexBuffer of length numSamples with unit magnitude at each sample.
      */
     public ComplexBuffer generate() {
-        Complex[] samples = new Complex[numSamples];
+        Complex[] samples   = new Complex[numSamples];
+        double    phaseStep = 2 * Math.PI * frequency / sampleRate;
         for (int i = 0; i < numSamples; i++) {
-            double phase = 2 * Math.PI * frequency * i / sampleRate;
+            double phase = phaseStep * i;
             samples[i] = new Complex(Math.cos(phase), Math.sin(phase));
         }
         return new ComplexBuffer(samples, sampleRate);
@@ -39,9 +40,10 @@ public class SineGenerator {
      * @return A ComplexBuffer of length numSamples with zero imaginary part.
      */
     public ComplexBuffer generateReal() {
-        Complex[] samples = new Complex[numSamples];
+        Complex[] samples   = new Complex[numSamples];
+        double    phaseStep = 2 * Math.PI * frequency / sampleRate;
         for (int i = 0; i < numSamples; i++) {
-            double phase = 2 * Math.PI * frequency * i / sampleRate;
+            double phase = phaseStep * i;
             samples[i] = new Complex(Math.sin(phase), 0.0);
         }
         return new ComplexBuffer(samples, sampleRate);

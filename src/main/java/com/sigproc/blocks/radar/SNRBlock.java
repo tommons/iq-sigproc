@@ -61,10 +61,11 @@ public class SNRBlock implements SignalBlock<List<Peak>, List<DetectionResult>> 
      */
     private double estimateNoise(int r, int d) {
         int D = map.numDopplerBins();
-        double sum = 0.0;
+        double sum   = 0.0;
         int    count = 0;
+        int    limit = guardCells + trainingCells;
 
-        for (int offset = guardCells + 1; offset <= guardCells + trainingCells; offset++) {
+        for (int offset = guardCells + 1; offset <= limit; offset++) {
             int dLeft  = (d - offset + D) % D;
             int dRight = (d + offset) % D;
             sum += map.magnitudeSq(r, dLeft) + map.magnitudeSq(r, dRight);

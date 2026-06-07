@@ -45,8 +45,9 @@ public class FFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
         double[] interleaved = toInterleaved(input.samples());
         double[] win = window.apply(n);
         for (int i = 0; i < n; i++) {
-            interleaved[2 * i]     *= win[i];
-            interleaved[2 * i + 1] *= win[i];
+            int idx = 2 * i;
+            interleaved[idx]     *= win[i];
+            interleaved[idx + 1] *= win[i];
         }
         new DoubleFFT_1D(n).complexForward(interleaved);
         return new ComplexBuffer(fromInterleaved(interleaved), input.sampleRate());
@@ -60,8 +61,9 @@ public class FFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
     public static double[] toInterleaved(Complex[] samples) {
         double[] buf = new double[samples.length * 2];
         for (int i = 0; i < samples.length; i++) {
-            buf[2 * i]     = samples[i].re();
-            buf[2 * i + 1] = samples[i].im();
+            int idx    = 2 * i;
+            buf[idx]   = samples[i].re();
+            buf[idx+1] = samples[i].im();
         }
         return buf;
     }
@@ -73,8 +75,10 @@ public class FFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
      */
     public static Complex[] fromInterleaved(double[] buf) {
         Complex[] out = new Complex[buf.length / 2];
-        for (int i = 0; i < out.length; i++)
-            out[i] = new Complex(buf[2 * i], buf[2 * i + 1]);
+        for (int i = 0; i < out.length; i++) {
+            int idx = 2 * i;
+            out[i]  = new Complex(buf[idx], buf[idx+1]);
+        }
         return out;
     }
 

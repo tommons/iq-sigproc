@@ -55,10 +55,11 @@ public class PulseCompressor implements SignalBlock<ComplexBuffer, ComplexBuffer
 
         double[] outBuf = new double[outLen * 2];
         for (int k = 0; k < outLen; k++) {
-            double inRe  = inBuf[2 * k],     inIm  = inBuf[2 * k + 1];
-            double refRe = refBuf[2 * k],    refIm = refBuf[2 * k + 1];
-            outBuf[2 * k]     = inRe * refRe - inIm * refIm;
-            outBuf[2 * k + 1] = inRe * refIm + inIm * refRe;
+            int    idx   = 2 * k;
+            double inRe  = inBuf[idx],    inIm  = inBuf[idx+1];
+            double refRe = refBuf[idx],   refIm = refBuf[idx+1];
+            outBuf[idx]   = inRe * refRe - inIm * refIm;
+            outBuf[idx+1] = inRe * refIm + inIm * refRe;
         }
 
         fft.complexInverse(outBuf, true);

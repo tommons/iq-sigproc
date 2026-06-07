@@ -32,11 +32,14 @@ public class ReplicaGenerator {
      */
     public ComplexBuffer generate() {
         int n = (int) Math.round(pulseWidth * sampleRate);
-        Complex[] samples = new Complex[n];
-        double chirpRate = bandwidth / pulseWidth;
+        Complex[] samples    = new Complex[n];
+        double    chirpRate  = bandwidth / pulseWidth;
+        double    piChirpRate = Math.PI * chirpRate;
+        double    halfBw     = bandwidth / 2.0;
+        double    dt         = 1.0 / sampleRate;
         for (int i = 0; i < n; i++) {
-            double t = i / sampleRate;
-            double phase = Math.PI * chirpRate * t * t + (-bandwidth/2) * t;
+            double t     = i * dt;
+            double phase = piChirpRate * t * t - halfBw * t;
             samples[i] = new Complex(Math.cos(phase), Math.sin(phase));
         }
         return new ComplexBuffer(samples, sampleRate);
