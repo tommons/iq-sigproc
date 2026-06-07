@@ -6,22 +6,38 @@ import com.sigproc.core.SignalBlock;
 import com.sigproc.blocks.fft.FFTBlock;
 import org.jtransforms.fft.DoubleFFT_1D;
 
+/**
+ * @brief Matched-filter pulse compressor implemented via frequency-domain multiplication.
+ *
+ * The replica is time-reversed and conjugated before the FFT so that the operation is
+ * a matched-filter convolution. For a zero-delay point target the output peak appears
+ * at index replicaLen - 1 (standard radar convention). Output length is
+ * inputLen + replicaLen - 1 (linear convolution, no circular aliasing).
+ */
 public class PulseCompressor implements SignalBlock<ComplexBuffer, ComplexBuffer> {
 
     private final ComplexBuffer replica;
 
+    /**
+     * @brief Constructs a PulseCompressor with the given reference replica.
+     * @param replica The matched-filter replica (e.g. output of ReplicaGenerator).
+     */
     public PulseCompressor(ComplexBuffer replica) {
         this.replica = replica;
     }
 
+    /**
+     * @brief Applies matched-filter compression to the received pulse.
+     * @param input The received pulse ComplexBuffer.
+     * @return A ComplexBuffer of length input.size() + replica.size() - 1 with the compressed output.
+     */
     @Override
     public ComplexBuffer process(ComplexBuffer input) {
         int outLen = input.size() + replica.size() - 1;
 
         ComplexBuffer paddedInput = input.zeroPadTo(outLen);
 
-        // Time-reverse and conjugate the replica so convolution == matched filtering;
-        // this places the output peak at index replicaLen-1 (standard radar convention).
+        // Time-reverse and conjugate the replica (matched-filter convolution convention).
         Complex[] replicaSamples = replica.samples();
         Complex[] revConj = new Complex[outLen];
         for (int i = 0; i < replicaSamples.length; i++)

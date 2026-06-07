@@ -1,8 +1,20 @@
 package com.sigproc.blocks.window;
 
+/**
+ * @brief Enumeration of window functions for spectral analysis and sidelobe control.
+ *
+ * Each constant implements apply(int n) to produce a length-n weight array normalized
+ * so that the peak value is 1.0 (for Taylor) or follows the standard formula otherwise.
+ */
 public enum Window {
 
+    /** @brief Rectangular window — uniform weights, no sidelobe reduction. */
     RECT {
+        /**
+         * @brief Returns an all-ones weight array.
+         * @param n Number of samples.
+         * @return double[] of length n filled with 1.0.
+         */
         @Override
         public double[] apply(int n) {
             double[] w = new double[n];
@@ -11,7 +23,13 @@ public enum Window {
         }
     },
 
+    /** @brief Hamming window — moderate sidelobe suppression (~−43 dB). */
     HAMMING {
+        /**
+         * @brief Returns Hamming window coefficients.
+         * @param n Number of samples.
+         * @return double[] of length n with Hamming weights.
+         */
         @Override
         public double[] apply(int n) {
             double[] w = new double[n];
@@ -21,7 +39,13 @@ public enum Window {
         }
     },
 
+    /** @brief Hann window — smooth roll-off, good general-purpose choice. */
     HANN {
+        /**
+         * @brief Returns Hann window coefficients.
+         * @param n Number of samples.
+         * @return double[] of length n with Hann weights.
+         */
         @Override
         public double[] apply(int n) {
             double[] w = new double[n];
@@ -31,7 +55,13 @@ public enum Window {
         }
     },
 
+    /** @brief Blackman window — high sidelobe suppression (~−74 dB). */
     BLACKMAN {
+        /**
+         * @brief Returns Blackman window coefficients.
+         * @param n Number of samples.
+         * @return double[] of length n with Blackman weights.
+         */
         @Override
         public double[] apply(int n) {
             double[] w = new double[n];
@@ -42,7 +72,13 @@ public enum Window {
         }
     },
 
+    /** @brief Taylor window (nbar=4, −30 dB sidelobes) — standard radar weighting. */
     TAYLOR {
+        /**
+         * @brief Returns Taylor window coefficients normalized so the peak equals 1.
+         * @param n Number of samples.
+         * @return double[] of length n with Taylor weights.
+         */
         @Override
         public double[] apply(int n) {
             int nbar = 4;
@@ -76,5 +112,10 @@ public enum Window {
         }
     };
 
+    /**
+     * @brief Computes the window coefficients for the given length.
+     * @param n Number of samples.
+     * @return double[] of length n containing the window weights.
+     */
     public abstract double[] apply(int n);
 }

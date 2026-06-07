@@ -5,15 +5,33 @@ import com.sigproc.core.ComplexBuffer;
 import com.sigproc.core.SignalBlock;
 import org.jtransforms.fft.DoubleFFT_1D;
 
+/**
+ * @brief FFT-based upsampling by an integer factor (interpft).
+ *
+ * Computes a forward FFT of the input, zero-pads the spectrum in the middle to expand
+ * it by the factor, then performs an inverse FFT. The Nyquist bin is split when the
+ * input length is even to avoid aliasing. Amplitude is preserved: a unit-magnitude
+ * tone in the input produces a unit-magnitude tone in the output.
+ */
 public class InterpFTBlock implements SignalBlock<ComplexBuffer, ComplexBuffer> {
 
     private final int factor;
 
+    /**
+     * @brief Constructs an InterpFTBlock with the given upsampling factor.
+     * @param factor Integer upsampling factor; must be >= 1.
+     * @throws IllegalArgumentException if factor < 1.
+     */
     public InterpFTBlock(int factor) {
         if (factor < 1) throw new IllegalArgumentException("factor must be >= 1");
         this.factor = factor;
     }
 
+    /**
+     * @brief Upsamples the input by the configured factor.
+     * @param input The band-limited input signal to upsample.
+     * @return A ComplexBuffer of length input.size() * factor at factor * input.sampleRate().
+     */
     @Override
     public ComplexBuffer process(ComplexBuffer input) {
         int n    = input.size();
