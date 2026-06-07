@@ -36,7 +36,7 @@ public class ReplicaGenerator {
         double chirpRate = bandwidth / pulseWidth;
         for (int i = 0; i < n; i++) {
             double t = i / sampleRate;
-            double phase = Math.PI * chirpRate * t * t;
+            double phase = Math.PI * chirpRate * t * t + (-bandwidth/2) * t;
             samples[i] = new Complex(Math.cos(phase), Math.sin(phase));
         }
         return new ComplexBuffer(samples, sampleRate);

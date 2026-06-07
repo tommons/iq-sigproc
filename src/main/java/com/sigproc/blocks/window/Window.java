@@ -1,89 +1,64 @@
 package com.sigproc.blocks.window;
 
 /**
- * @brief Enumeration of window functions for spectral analysis and sidelobe control.
+ * @brief Functional interface for window functions used in spectral analysis and sidelobe control.
  *
- * Each constant implements apply(int n) to produce a length-n weight array normalized
- * so that the peak value is 1.0 (for Taylor) or follows the standard formula otherwise.
+ * Standard windows are provided as static constants. The Taylor window is available both
+ * as a default constant (nbar=4, sll=30 dB) and via the taylor() factory for custom parameters.
  */
-public enum Window {
+@FunctionalInterface
+public interface Window {
+
+    /**
+     * @brief Computes the window coefficients for the given length.
+     * @param n Number of samples.
+     * @return double[] of length n containing the window weights.
+     */
+    double[] apply(int n);
 
     /** @brief Rectangular window — uniform weights, no sidelobe reduction. */
-    RECT {
-        /**
-         * @brief Returns an all-ones weight array.
-         * @param n Number of samples.
-         * @return double[] of length n filled with 1.0.
-         */
-        @Override
-        public double[] apply(int n) {
-            double[] w = new double[n];
-            for (int i = 0; i < n; i++) w[i] = 1.0;
-            return w;
-        }
-    },
+    Window RECT = n -> {
+        double[] w = new double[n];
+        for (int i = 0; i < n; i++) w[i] = 1.0;
+        return w;
+    };
 
     /** @brief Hamming window — moderate sidelobe suppression (~−43 dB). */
-    HAMMING {
-        /**
-         * @brief Returns Hamming window coefficients.
-         * @param n Number of samples.
-         * @return double[] of length n with Hamming weights.
-         */
-        @Override
-        public double[] apply(int n) {
-            double[] w = new double[n];
-            for (int i = 0; i < n; i++)
-                w[i] = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (n - 1));
-            return w;
-        }
-    },
+    Window HAMMING = n -> {
+        double[] w = new double[n];
+        for (int i = 0; i < n; i++)
+            w[i] = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (n - 1));
+        return w;
+    };
 
     /** @brief Hann window — smooth roll-off, good general-purpose choice. */
-    HANN {
-        /**
-         * @brief Returns Hann window coefficients.
-         * @param n Number of samples.
-         * @return double[] of length n with Hann weights.
-         */
-        @Override
-        public double[] apply(int n) {
-            double[] w = new double[n];
-            for (int i = 0; i < n; i++)
-                w[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (n - 1)));
-            return w;
-        }
-    },
+    Window HANN = n -> {
+        double[] w = new double[n];
+        for (int i = 0; i < n; i++)
+            w[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (n - 1)));
+        return w;
+    };
 
     /** @brief Blackman window — high sidelobe suppression (~−74 dB). */
-    BLACKMAN {
-        /**
-         * @brief Returns Blackman window coefficients.
-         * @param n Number of samples.
-         * @return double[] of length n with Blackman weights.
-         */
-        @Override
-        public double[] apply(int n) {
-            double[] w = new double[n];
-            for (int i = 0; i < n; i++)
-                w[i] = 0.42 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1))
-                             + 0.08 * Math.cos(4 * Math.PI * i / (n - 1));
-            return w;
-        }
-    },
+    Window BLACKMAN = n -> {
+        double[] w = new double[n];
+        for (int i = 0; i < n; i++)
+            w[i] = 0.42 - 0.5  * Math.cos(2 * Math.PI * i / (n - 1))
+                        + 0.08 * Math.cos(4 * Math.PI * i / (n - 1));
+        return w;
+    };
 
-    /** @brief Taylor window (nbar=4, −30 dB sidelobes) — standard radar weighting. */
-    TAYLOR {
-        /**
-         * @brief Returns Taylor window coefficients normalized so the peak equals 1.
-         * @param n Number of samples.
-         * @return double[] of length n with Taylor weights.
-         */
-        @Override
-        public double[] apply(int n) {
-            int nbar = 4;
-            double sll = 30.0;
+    /** @brief Taylor window with default parameters (nbar=4, sll=30 dB). */
+    Window TAYLOR = taylor(4, 30.0);
 
+    /**
+     * @brief Creates a Taylor window with the specified near-sidelobe parameters.
+     * @param nbar Number of nearly-constant-level sidelobes adjacent to the main lobe.
+     * @param sll  Peak sidelobe level in dB (positive value, e.g. 35 for −35 dB).
+     * @return A Window instance that produces Taylor-weighted coefficients normalized to peak = 1.
+     */
+    static Window taylor(int nbar, double sll) {
+        return n -> {
             double R  = Math.pow(10.0, sll / 20.0);
             double A  = Math.log(R + Math.sqrt(R * R - 1.0)) / Math.PI;
             double s2 = (double)(nbar * nbar) / (A * A + (nbar - 0.5) * (nbar - 0.5));
@@ -109,13 +84,6 @@ public enum Window {
             }
             for (int i = 0; i < n; i++) w[i] /= peak;
             return w;
-        }
-    };
-
-    /**
-     * @brief Computes the window coefficients for the given length.
-     * @param n Number of samples.
-     * @return double[] of length n containing the window weights.
-     */
-    public abstract double[] apply(int n);
+        };
+    }
 }
